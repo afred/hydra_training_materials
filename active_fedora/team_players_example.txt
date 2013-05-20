@@ -1,0 +1,246 @@
+
+############################
+# Example 2 -- with arbitrary strings "hasPlayers" and "playsFor" passed for :property to has_many and belongs_to, respectively.
+# also, :incoming => true is not set for the has_many side this time.
+############################
+
+# app/models/team.rb
+class Team < ActiveFedora::Base
+  has_many :players, :property => "hasPlayers", :class_name => 'Player'
+end
+
+# app/models/palyer.rb
+class Player < ActiveFedora::Base
+  belongs_to :team, :property => "playsFor", :class_name => 'Team'
+end
+
+
+;^) rails c
+> t = Team.create :pid => "team:patriots"
+ => #<Team pid:"team:patriots", > 
+> t.players << Player.new(:pid => "player:brady")
+ => [#<Player pid:"player:brady", >]
+exit
+
+# content of RELS-EXT datastream for 'player:brady'
+# has relationship of type 'hasPlayers', which was specified in call to has_many of Team model.
+# no mention of playsFor. wtf?
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/player:brady">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Player"></ns0:hasModel>
+    <ns1:hasPlayers rdf:resource="info:fedora/team:patriots"></ns1:hasPlayers>
+  </rdf:Description>
+</rdf:RDF>
+
+# content of RELS-EXT datastream for 'team:patriots'
+# no mention of 'player:brady', playsFor, or hasPlayers. wtf?
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/team:patriots">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Team"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# team doesn't know about it's player. wtf?
+> t = Team.find('team:patriots')
+ => #<Team pid:"team:patriots", > 
+> t.players
+ => []
+
+# and now, player doesn't know about it's team. wtf?
+> p = Player.find('player:brady')
+ => #<Player pid:"player:brady", > 
+> p.team
+ => nil
+
+
+
+############################
+# Example 3 -- with arbitrary strings "hasPlayers" and "playsFor" passed for :property to has_many and belongs_to, respectively.
+# this time adding :incoming => true back in to see if it makes a difference.
+############################
+
+# app/models/team.rb
+class Team < ActiveFedora::Base
+  has_many :players, :property => "hasPlayers", :incoming => true, :class_name => 'Player'
+end
+
+# app/models/palyer.rb
+class Player < ActiveFedora::Base
+  belongs_to :team, :property => "playsFor", :class_name => 'Team'
+end
+
+
+;^) rails c
+> t = Team.create :pid => 'team:celtics'
+ => #<Team pid:"team:celtics", > 
+> t.players << Player.new(:pid => 'player:garnett')
+ => [#<Player pid:"player:garnett", >] 
+exit
+
+# RELS-EXT of 'player:garnett'
+# has the relationship specified in Team as in Example 2
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/player:garnett">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Player"></ns0:hasModel>
+    <ns1:hasPlayers rdf:resource="info:fedora/team:celtics"></ns1:hasPlayers>
+  </rdf:Description>
+</rdf:RDF>
+
+# RELS-EXT of 'team:celtics'
+# again, no relationships at all
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/team:celtics">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Team"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+
+# now same results as Example 2, so adding :incoming => true doesn't make a difference here
+;^) rails c
+> t = Team.find("team:celtics")
+ => #<Team pid:"team:celtics", > 
+> t.players
+ => [] 
+> p = Player.find('player:garnett')
+ => #<Player pid:"player:garnett", > 
+> p.team
+ => nil 
+> 
+
+
+############################
+# Example 4 -- using sync'd up :property => :is_part_of AND using the :incoming => true for the has_many side.
+############################
+
+# app/models/team.rb
+class Team < ActiveFedora::Base
+  has_many :players, :property => :is_part_of, :incoming => true, :class_name => 'Player'
+end
+
+# app/models/palyer.rb
+class Player < ActiveFedora::Base
+  belongs_to :team, :property => :is_part_of, :class_name => 'Team'
+end
+
+
+# RELS-EXT for 'team:broncos'
+# no relationships, not surprising. wtf?
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/team:broncos">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Team"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# RELS-EXT for 'player:elway'
+# has isPartOf 'team:broncos'
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/player:elway">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Player"></ns0:hasModel>
+    <ns1:isPartOf rdf:resource="info:fedora/team:broncos"></ns1:isPartOf>
+  </rdf:Description>
+</rdf:RDF>
+
+
+# Ah ha!
+;^) rails c
+> t = Team.find('team:broncos')
+ => #<Team pid:"team:broncos", > 
+> t.players
+ => [#<Player pid:"player:elway", >] 
+> p = Player.find('player:elway')
+ => #<Player pid:"player:elway", > 
+> p.team
+ => #<Team pid:"team:broncos", > 
+> 
+
+
+############################
+# Example 4 -- using valid, but different values for :property. Keeping :incoming => true
+############################
+
+
+class Team < ActiveFedora::Base
+  has_many :players, :property => :has_part, :incoming => true, :class_name => 'Player'
+end
+
+# app/models/palyer.rb
+class Player < ActiveFedora::Base
+  belongs_to :team, :property => :is_part_of, :class_name => 'Team'
+end
+
+
+;^) rails c
+> t = Team.create(:pid => 'team:bills')
+ => #<Team pid:"team:bills", > 
+> t.players << Player.new(:pid => 'player:flutie')
+ => [#<Player pid:"player:flutie", >] 
+> exit
+
+# Ah Ha!... team has players, but player doesn't have team.
+# I'm guessing this is because Team instance knows about 'has_part',
+# and the RELS-EXT for player:flutie knows about 'hasPart' (and they are mapped by ActiveFedora).
+# but Player instance only knows about 'is_part_of', and there is no 'isPartOf' in the RELS-EXT for player:flutie.
+# still... wtf?
+;^) rails c
+> t = Team.find('team:bills')
+ => #<Team pid:"team:bills", > 
+> t.players
+ => [#<Player pid:"player:flutie", >] 
+> p = Player.find('player:flutie')
+ => #<Player pid:"player:flutie", > 
+> p.team
+ => nil 
+
+
+
+############################
+# Example
+############################
+
+# app/models/team.rb
+class Team < ActiveFedora::Base
+  has_many :players, :property => :has_part, :incoming => true, :class_name => 'Player'
+end
+
+# app/models/palyer.rb
+class Player < ActiveFedora::Base
+end
+
+
+;^) rails c
+> t = Team.create(:pid => 'team:redsox')
+ => #<Team pid:"team:redsox", >
+> t.players << Player.new(:pid => 'player:ortiz')
+ => [#<Player pid:"player:ortiz", >] 
+> exit
+
+
+# RAILS-EXT of player:ortiz 
+# relates to team:redsox via hasPart
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/player:ortiz">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Player"></ns0:hasModel>
+    <ns1:hasPart rdf:resource="info:fedora/team:redsox"></ns1:hasPart>
+  </rdf:Description>
+</rdf:RDF>
+
+# RAILS-EXT of team:redsox. Does not refer to player:ortiz
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/team:redsox">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Team"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+
+# Team has player, but player does not even have a method for 'team'.
+;^) rails c
+> t= Team.find('team:redsox')
+ => #<Team pid:"team:redsox", > 
+> t.players
+ => [#<Player pid:"player:ortiz", >] 
+> p = Player.find('player:ortiz')
+ => #<Player pid:"player:ortiz", > 
+> p.team
+NoMethodError: undefined method `team' for #<Player pid:"player:ortiz", >
+...
+>
