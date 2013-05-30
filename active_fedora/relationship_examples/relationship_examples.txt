@@ -1,0 +1,328 @@
+#=============
+# EXAMPLE
+# - Relationships (unidirectional):
+#   - Item belongs_to Collection
+# - RDF predicates
+#   - Item :is_part_of Collection
+#=============
+
+# item.rb
+class Item < ActiveFedora::Base
+  belongs_to :collection, :property => :is_part_of, :class_name => "Collection"
+end
+
+# collection.rb
+class Collection < ActiveFedora::Base
+end
+
+# Create an Item 'i:cheese'.
+irb > Item.create(:pid => 'i:cheese')
+ => #<Item pid:"i:cheese", > 
+
+# Verify it got saved by looking it up directly in Fedora.
+irb > Item.find(:pid => 'i:cheese')
+ => [#<Item pid:"i:cheese", >] 
+
+# Inpsect the RDF that defines what Item 'i:cheese' is related to.
+irb > puts Item.find('i:cheese').RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+ => nil 
+
+# Grab an instance of Item 'i:cheese'
+irb > cheese = Item.find('i:cheese')
+ => #<Item pid:"i:cheese", > 
+
+# Add a new Collection 'c:tasty_stuff' as one of the collections that Item 'i:cheese' belongs to.
+irb > cheese.collections << Collection.new(:pid => 'c:tasty_stuff')
+ => [#<Collection pid:"c:tasty_stuff", >] 
+
+# The Collection 'c:tasty_stuff' persisted to Fedora, but...
+irb > Collection.find('c:tasty_stuff')
+ => #<Collection pid:"c:tasty_stuff", > 
+
+# ... the relationship from Item 'i:cheese' to Collection 'c:tasty_stuff' has not yet persisted.
+# An instance of Item 'i:cheese' fetched from Fedora returns nothing from Item#collections...
+irb > Item.find('i:cheese').collections
+ => [] 
+
+# ... and there is nothing in the RDF that identifies the relationship.
+irb > puts Item.find('i:cheese').RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# We need to save the instance of Item 'i:cheese' to persist the relationship.
+irb > cheese.save!
+ => true 
+
+# And now, an instance of Item 'i:cheese' from Fedora returns a Collection 'c:tasty_stuff' from Item#collections.
+irb > Item.find('i:cheese').collections
+ => [#<Collection pid:"c:tasty_stuff", >] 
+
+# And we can see it in the RDF for Item 'i:cheese' as well. 
+irb > puts Item.find('i:cheese').RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+    <ns1:isPartOf rdf:resource="info:fedora/c:tasty_stuff"></ns1:isPartOf>
+  </rdf:Description>
+</rdf:RDF>
+ => nil 
+irb > exit
+
+
+
+#=============
+# EXAMPLE
+# - Relationships (biidirectional):
+#   - Item belongs_to Collection
+#   - Collection belongs_to Item
+# - RDF predicates
+#   - Item :is_part_of Collection
+#   - Collection :is_part_of Item
+#=============
+
+# item.rb
+class Item < ActiveFedora::Base
+  belongs_to :collection, :property => :is_part_of, :class_name => "Collection"
+end
+
+# collection.rb
+class Collection < ActiveFedora::Base
+  belongs_to :collection, :property => :is_part_of, :class_name => "Item"
+end
+
+
+
+
+
+#=============
+# EXAMPLE
+# - bi-directional
+# - symmetric AF relationship
+#   - Item has_and_belongs_to_many Collection
+#   - Collection has_and_belongs_to_many Item
+# - symmetric RDF predicates
+#   - Item :is_part_of Collection
+#   - Collection :is_part_of Item
+#=============
+
+# item.rb
+class Item < ActiveFedora::Base
+  has_and_belongs_to_many :collections, :property => :is_part_of, :class_name => "Collection"
+end
+
+# collection.rb
+class Collection < ActiveFedora::Base
+  has_and_belongs_to_many :items, :property => :is_part_of, :class_name => 'Item'
+end
+
+# create the Collection 'c:awesome'
+irb > awesome = Collection.create(:pid => Collection 'c:awesome')
+ => #<Collection pid:"c:awesome", >
+
+# See the RDF that specifies the relationship
+irb > puts awesome.RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/c:awesome">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Collection"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# add a new (unsaved) Item, Item 'i:cheese' to the Collection 'c:awesome'
+irb > awesome.items << Item.new(:pid => Item 'i:cheese')
+ => [#<Item pid:"i:cheese", >] 
+
+# the Collection 'c:awesome' instance has the Item 'i:cheese'
+# in memory, but... 
+irb > awesome.items
+ => [#<Item pid:"i:cheese", >] 
+
+# ... the relationship hasn't persisted to fedora yet,
+# which we can check like this.
+irb > Collection.find('c:awesome').items
+ => [] 
+
+# Or by looking at RDF for Collection 'c:awesome'... it's the same as before
+irb > puts awesome.RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/c:awesome">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Collection"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# on the other side, Item 'i:cheese' doesn't even have
+# the Collection 'c:awesome' in memory.
+irb > cheese = awesome.items.first
+ => #<Item pid:"i:cheese", > 
+irb > cheese.collections
+ => []
+
+# And needless to say, the relationship from Item 'i:cheese' to Collection 'c:awesome'
+# has not persisted to fedora yet either.
+irb > Item.find('i:cheese').collections
+ => [] 
+
+# confirm by checking the RDF for Item 'i:cheese'
+irb > cheese.RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# Saving the Collection 'c:awesome' will persist the relationship
+# from the Collection 'c:awesome' to Item 'i:cheese'
+irb > awesome.save!
+ => true 
+
+# we can check it like this.
+irb > Collection.find('c:awesome').items
+ => [#<Item pid:"i:cheese", >] 
+
+# and also by looking at the RDF for Collection 'c:awesome'.
+irb > awesome.RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/c:awesome">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Collection"></ns0:hasModel>
+    <ns1:isPartOf rdf:resource="info:fedora/i:cheese"></ns1:isPartOf>
+  </rdf:Description>
+</rdf:RDF>
+
+# But.. this did not set the relationship from Item 'i:cheese' to Collection 'c:awesome'
+irb > cheese.collections
+=> [] 
+
+# which means that the relationship did not perist in fedora either.
+irb > Item.find('i:cheese').collections
+ => [] 
+
+# And as we can expeect, the RDF for Item 'i:cheese' is still the same as before
+irb > puts Item.find('i:cheese').RELS_EXT.content
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# We have to explicitly set the relationship from Item 'i:cheese' to Collection 'c:awesome'.
+irb > cheese.collections << awesome
+ => [#<Collection pid:"c:awesome", >] 
+
+# Still hasn't persisted in fedora yet though....
+irb > puts Item.find('i:cheese').RELS_EXT.content
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+  </rdf:Description>
+</rdf:RDF>
+
+# And so it's still not returned by Item#collections
+> Item.find('i:cheese').collections
+ => [] 
+
+# For that we have to save.
+irb > cheese.save!
+ => true 
+
+# Now we can see it in the RDF...
+irb > puts Item.find('i:cheese').RELS_EXT.content
+
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+    <ns1:isPartOf rdf:resource="info:fedora/c:awesome"></ns1:isPartOf>
+  </rdf:Description>
+</rdf:RDF>
+
+# And the Colletion 'c:awesome' is now returned by Item#collections
+irb > Item.find('i:cheese').collections
+ => [#<Collection pid:"c:awesome", >] 
+
+# Huzzah! We have all the relationships we want now.
+
+#=============
+# EXAMPLE
+# - bi-directional
+# - symmetric AF relationship
+#   - Item has_and_belongs_to_many Collection
+#   - Collection has_and_belongs_to_many Item
+# - asymmetric RDF predicates
+#   - Item :is_part_of Collection
+#   - Collection :has_part Item
+#=============
+
+# item.rb
+class Item < ActiveFedora::Base
+  has_and_belongs_to_many :collections, :property => :is_part_of, :class_name => "Collection"
+end
+
+
+# collection.rb
+class Collection < ActiveFedora::Base
+  has_and_belongs_to_many :items, :property => :has_part, :class_name => 'Item'
+end
+
+# Delete all existing sample objects with our little helper model
+irb > Examples.delete_all
+
+# Create the Collection 'c:awesome'
+irb > awesome = Collection.create(:pid => Collection 'c:awesome')
+ => #<Collection pid:"c:awesome", >
+
+# Add Item 'i:cheese' to Collection 'c:awesome' and save it 
+irb > awesome.items << Item.new(:pid => Item 'i:cheese')
+ => [#<Item pid:"i:cheese", >] 
+irb > awesome.save!
+ => true 
+
+# We see here that the relationship from Collection 'c:awesome' to Item 'i:cheese' has persisted.
+irb > Collection.find('c:awesome').items
+ => [#<Item pid:"i:cheese", >]  
+
+# ... but relationship from Item 'i:cheese' to Collection 'c:awesome' has not persisted.
+irb > Item.find('i:cheese').collections
+ => [] 
+
+# Set relationship from Item 'i:cheese' to Collection 'c:awesome', and save it.
+irb > cheese = Item.find('i:cheese')
+ => #<Item pid:"i:cheese", > 
+irb > cheese.collections << awesome
+ => [#<Collection pid:"c:awesome", >] 
+irb > cheese.save!
+ => true 
+
+# Now we see that the relationship from Item 'i:cheese' to Collection 'c:awesome' has persisted.
+irb > Item.find('i:cheese').collections
+ => [#<Collection pid:"c:awesome", >] 
+
+# And we how the RELS-EXT RDF for Collection 'c:awesome' relates to Item 'i:cheese' with a 'hasPart' predicate,
+# which was mapped from the :property => :has_part when we define the relationship in the Collection model.
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/c:awesome">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Collection"></ns0:hasModel>
+    <ns1:hasPart rdf:resource="info:fedora/i:cheese"></ns1:hasPart>
+  </rdf:Description>
+</rdf:RDF>
+
+# And likewise, the RELS-EXT RDF for Item 'i:cheese' relates to Collection 'c:awesome' with 'isPartOf' predicate,
+# mapped from the :property => :is_part_of when we define the relationships in the Item model.
+<rdf:RDF xmlns:ns0="info:fedora/fedora-system:def/model#" xmlns:ns1="info:fedora/fedora-system:def/relations-external#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="info:fedora/i:cheese">
+    <ns0:hasModel rdf:resource="info:fedora/afmodel:Item"></ns0:hasModel>
+    <ns1:isPartOf rdf:resource="info:fedora/c:awesome"></ns1:isPartOf>
+  </rdf:Description>
+</rdf:RDF>
